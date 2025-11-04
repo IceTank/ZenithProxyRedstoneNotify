@@ -20,6 +20,7 @@ import com.zenith.network.client.ClientSession;
 import com.zenith.network.codec.PacketHandler;
 import com.zenith.network.codec.PacketHandlerCodec;
 import com.zenith.network.codec.PacketHandlerStateCodec;
+import kotlin.Pair;
 import org.example.RedstoneLampNotifier;
 import org.geysermc.mcprotocollib.protocol.data.ProtocolState;
 import org.geysermc.mcprotocollib.protocol.data.game.level.block.BlockEntityInfo;
@@ -29,15 +30,13 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.Clien
 import org.jspecify.annotations.Nullable;
 
 import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.zenith.Globals.CACHE;
 import static com.zenith.Globals.DISCORD;
 import static com.zenith.util.ComponentSerializer.minimessage;
+import static org.example.RedstoneLampNotifier.PLUGIN_CONFIG;
 
 /*
  * @author IceTank
@@ -46,6 +45,7 @@ import static com.zenith.util.ComponentSerializer.minimessage;
 public class RedstoneNotifierModule extends Module {
     private static CopyOnWriteArrayList<BlockPos> blockUpdates = new CopyOnWriteArrayList<>();
     private static final Set<BlockPos> activeRedstoneLamps = new HashSet<>();
+    private List<Pair<Integer, BlockPos>> pendingActiveLamps = new CopyOnWriteArrayList<>();
     @Override
     public List<EventConsumer<?>> registerEvents() {
         return List.of(
@@ -55,11 +55,27 @@ public class RedstoneNotifierModule extends Module {
 
     @Override
     public boolean enabledSetting() {
-        return RedstoneLampNotifier.PLUGIN_CONFIG.enabled;
+        return PLUGIN_CONFIG.enabled;
     }
 
     private void handleClientTick(ClientTickEvent event) {
         try {
+            pendingActiveLamps.replaceAll(e -> new Pair<>(e.getFirst() - 1, e.getSecond()));
+            ArrayList<Pair<Integer, BlockPos>> toRemove = new ArrayList<>(); // CopyOnWriteArrayList does not support remove() on iteration
+            for (Pair<Integer, BlockPos> entry : pendingActiveLamps) {
+                if (!isActiveRedstoneLamp(entry.getSecond())) {
+                    toRemove.add(entry);
+                    continue;
+                }
+                if (entry.getFirst() <= 0) {
+                    BlockPos pos = entry.getSecond();
+                    List<String> lines = getSignTextOnBlock(pos);
+                    notify(lines);
+                    toRemove.add(entry);
+                }
+            }
+            pendingActiveLamps.removeAll(toRemove);
+
             while (!blockUpdates.isEmpty()) {
                 BlockPos pos = blockUpdates.removeFirst();
                 if (isRedstoneLamp(pos)) {
@@ -68,12 +84,12 @@ public class RedstoneNotifierModule extends Module {
                             continue;
                         }
                         activeRedstoneLamps.add(pos);
+                        if (PLUGIN_CONFIG.triggerDelay > 0) {
+                            pendingActiveLamps.add(new Pair<>(PLUGIN_CONFIG.triggerDelay, pos));
+                            continue;
+                        }
                         List<String> lines = getSignTextOnBlock(pos);
-                        if (lines == null || lines.isEmpty()) return;
                         notify(lines);
-                        Proxy.getInstance().getActiveConnections().forEach(c -> {
-                            c.sendAsyncMessage(minimessage("<blue> Lamp Active with lines: " + lines));
-                        });
                     } else {
                         activeRedstoneLamps.remove(pos);
                     }
@@ -85,13 +101,30 @@ public class RedstoneNotifierModule extends Module {
     }
 
     private void notify(List<String> lines) {
+        if (lines != null && !lines.isEmpty()) {
+            discordNotify(lines);
+            chatNotify(lines);
+        }
+    }
+
+    private void chatNotify(List<String> lines) {
+        Proxy.getInstance().getActiveConnections().forEach(c -> {
+            c.sendAsyncMessage(minimessage("<blue> Lamp Active with lines: " + String.join(" ", lines.stream()
+                    .map(s -> s.replaceAll("\"", "")).filter(s -> !s.isEmpty()).toList()
+            )));
+        });
+    }
+
+    private void discordNotify(List<String> lines) {
         if (!DISCORD.isRunning()) return;
         if (lines.isEmpty()) return;
 
         DISCORD.sendEmbedMessage(Embed.builder()
                 .title("Redstone Lamp Activated")
                 .description("A redstone lamp has been activated with the following sign text:")
-                .addField("Sign Text", String.join("\n", lines))
+                .addField("Sign Text", String.join("\n", lines.stream()
+                        .map(s -> s.replaceAll("\"", "")).filter(s -> !s.isEmpty()).toList()
+                ))
         );
     }
 

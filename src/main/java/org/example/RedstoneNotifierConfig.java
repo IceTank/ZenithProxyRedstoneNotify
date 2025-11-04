@@ -12,4 +12,5 @@ package org.example;
 public class RedstoneNotifierConfig {
     public boolean enabled = true;
     public boolean discordNotifications = true;
+    public int triggerDelay = 20;
 }
