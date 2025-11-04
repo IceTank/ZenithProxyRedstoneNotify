@@ -1,8 +1,16 @@
-# ZenithProxy Example Plugin
+# ZenithProxy RedstoneNotifyCommand Plugin
 
 [ZenithProxy](https://github.com/rfresh2/ZenithProxy) is a Minecraft proxy and bot.
 
-This repository is an example core plugin for ZenithProxy, allowing you to add custom modules and commands.
+This plugin adds a notification whenever a redstone lamp is powered on for a certain amount of time. When a powered on
+redstone lamp is detected the plugin will scan for signs that are placed on the side of the redstone lamp block.
+If any signs are found, all texts on all found signs will be included in the notification message.
+
+## Commands
+
+- `/lampNotify on/off` - Enable or disable redstone lamp notifications
+- `/lampNotify discord on/off` - Toggle Discord notification messages
+- `/lampNotify triggerDelay [delay in ticks]` - Set the amount of time a lamp has to be powered on before triggering a notification (default: 20 ticks)
 
 ## Installing Plugins
 
