@@ -1,5 +1,8 @@
 package org.example;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Example configuration POJO.
  *
@@ -13,4 +16,5 @@ public class RedstoneNotifierConfig {
     public boolean enabled = true;
     public boolean discordNotifications = true;
     public int triggerDelay = 20;
+    public List<Long> rolesToPing = new ArrayList<>();
 }

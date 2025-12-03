@@ -44,11 +44,62 @@ public class RedstoneNotifyCommand extends Command {
                             // other properties like fields can be left unset without issues
                             .title("Lamp Notification " + toggleStrCaps(PLUGIN_CONFIG.enabled));
                 }))
-                .then(literal("discord").then(argument("toggle", toggle()).executes(c -> {
-                    PLUGIN_CONFIG.discordNotifications = getToggle(c, "toggle");
-                    c.getSource().getEmbed()
-                            .title("Discord Notifications " + toggleStrCaps(PLUGIN_CONFIG.discordNotifications));
-                })))
+                .then(literal("discord")
+                        .then(argument("toggle", toggle())
+                                .executes(c -> {
+                                    PLUGIN_CONFIG.discordNotifications = getToggle(c, "toggle");
+                                    c.getSource().getEmbed()
+                                            .title("Discord Notifications " + toggleStrCaps(PLUGIN_CONFIG.discordNotifications));
+                                }))
+                        .then(literal("role")
+                                .then(literal("add")
+                                        .then(argument("roleId", integer()).executes(c -> {
+                                                    long roleId = getInteger(c, "roleId");
+                                                    if (PLUGIN_CONFIG.rolesToPing.contains(roleId)) {
+                                                        c.getSource().getEmbed()
+                                                                .title("Role ID " + roleId + " is already in the notification list.");
+                                                        return ERROR;
+                                                    }
+                                                    PLUGIN_CONFIG.rolesToPing.add(roleId);
+                                                    c.getSource().getEmbed()
+                                                            .title("Added Role ID " + roleId + " to the notification list.");
+                                                    return OK;
+                                                })
+                                        )
+                                )
+                                .then(literal("remove")
+                                        .then(argument("roleId", integer()).executes(c -> {
+                                            long roleId = getInteger(c, "roleId");
+                                            if (!PLUGIN_CONFIG.rolesToPing.contains(roleId)) {
+                                                c.getSource().getEmbed()
+                                                        .title("Role ID " + roleId + " is not in the notification list.");
+                                                return ERROR;
+                                            }
+                                            PLUGIN_CONFIG.rolesToPing.remove(roleId);
+                                            c.getSource().getEmbed()
+                                                    .title("Removed Role ID " + roleId + " from the notification list.");
+                                            return OK;
+                                        }))
+                                        .then(literal("list")
+                                                .executes(c -> {
+                                                    if (PLUGIN_CONFIG.rolesToPing.isEmpty()) {
+                                                        c.getSource().getEmbed()
+                                                                .title("No Role IDs in the notification list.");
+                                                        return OK;
+                                                    }
+                                                    StringBuilder rolesList = new StringBuilder();
+                                                    for (Long roleId : PLUGIN_CONFIG.rolesToPing) {
+                                                        rolesList.append(roleId).append("\n");
+                                                    }
+                                                    c.getSource().getEmbed()
+                                                            .title("Role IDs in the notification list:")
+                                                            .description(rolesList.toString());
+                                                    return OK;
+                                                })
+                                        )
+                                )
+                        )
+                )
                 .then(literal("triggerDelay").executes(c -> {
                     int ticks = PLUGIN_CONFIG.triggerDelay;
                     c.getSource().getEmbed()
@@ -67,6 +118,8 @@ public class RedstoneNotifyCommand extends Command {
                 .primaryColor()
                 .addField("Enabled", toggleStr(PLUGIN_CONFIG.enabled))
                 .addField("Discord Notification", PLUGIN_CONFIG.discordNotifications ? "On" : "Off")
-                .addField("Trigger Delay", PLUGIN_CONFIG.triggerDelay + " ticks");
+                .addField("Trigger Delay", PLUGIN_CONFIG.triggerDelay + " ticks")
+                .addField("Roles to Ping", PLUGIN_CONFIG.rolesToPing.isEmpty() ? "None" :
+                        String.join(", ", PLUGIN_CONFIG.rolesToPing.stream().map(Object::toString).toList()));
     }
 }

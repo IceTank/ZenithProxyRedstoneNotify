@@ -36,6 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static com.zenith.Globals.CACHE;
 import static com.zenith.Globals.DISCORD;
 import static com.zenith.util.ComponentSerializer.minimessage;
+import static org.example.RedstoneLampNotifier.LOG;
 import static org.example.RedstoneLampNotifier.PLUGIN_CONFIG;
 
 /*
@@ -96,7 +97,7 @@ public class RedstoneNotifierModule extends Module {
                 }
             }
         } catch (Exception e) {
-            RedstoneLampNotifier.LOG.error("Error processing redstone lamp updates", e);
+            LOG.error("Error processing redstone lamp updates", e);
         }
     }
 
@@ -119,13 +120,22 @@ public class RedstoneNotifierModule extends Module {
         if (!DISCORD.isRunning()) return;
         if (lines.isEmpty()) return;
 
-        DISCORD.sendEmbedMessage(Embed.builder()
+        Embed embed = Embed.builder()
                 .title("Redstone Lamp Activated")
                 .description("A redstone lamp has been activated with the following sign text:")
                 .addField("Sign Text", String.join("\n", lines.stream()
                         .map(s -> s.replaceAll("\"", "")).filter(s -> !s.isEmpty()).toList()
-                ))
-        );
+                ));
+
+        if (!PLUGIN_CONFIG.rolesToPing.isEmpty()) {
+            StringBuilder pingBuilder = new StringBuilder();
+            for (Long roleId : PLUGIN_CONFIG.rolesToPing) {
+                pingBuilder.append("<@&").append(roleId).append("> ");
+            }
+            embed.addField("Ping:", pingBuilder.toString().trim());
+        }
+
+        DISCORD.sendEmbedMessage(embed);
     }
 
     private boolean isRedstoneLamp(BlockPos pos) {
@@ -148,26 +158,27 @@ public class RedstoneNotifierModule extends Module {
             Block neighborBlock = World.getBlock(neighborPos);
             if (neighborBlock.blockEntityType() == BlockEntityType.SIGN) {
                 BlockEntityInfo info = getBlockEntityInfoAt(neighborPos);
-                if (info != null) {
-                    try {
-                        Tag tag = MNBTIO.read(info.getNbt());
-                        if (tag instanceof CompoundTag compound) {
-                            Tag front = compound.get("front_text");
-                            if (front instanceof CompoundTag frontCompound) {
-                                Tag messagesTag = frontCompound.get("messages");
-                                if (messagesTag instanceof ListTag<?> list) {
-                                    for (Tag lineTag : list.getValue()) {
-                                        if (lineTag instanceof StringTag stringTag) {
-                                            lines.add(stringTag.getValue());
-                                        }
+                if (info == null) {
+                    continue;
+                }
+                try {
+                    assert info.getNbt() != null;
+                    Tag tag = MNBTIO.read(info.getNbt());
+                    if (tag instanceof CompoundTag compound) {
+                        Tag front = compound.get("front_text");
+                        if (front instanceof CompoundTag frontCompound) {
+                            Tag messagesTag = frontCompound.get("messages");
+                            if (messagesTag instanceof ListTag<?> list) {
+                                for (Tag lineTag : list.getValue()) {
+                                    if (lineTag instanceof StringTag stringTag) {
+                                        lines.add(stringTag.getValue());
                                     }
                                 }
-                                System.out.println(messagesTag);
                             }
                         }
-                    } catch (UncheckedIOException e) {
-                        return null;
                     }
+                } catch (UncheckedIOException e) {
+                    LOG.error("Failed to read NBT for sign at {}", neighborPos, e);
                 }
             }
         }
